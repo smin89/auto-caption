@@ -16,6 +16,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final WebSocketService _webSocketService = WebSocketService();
   final ScrollController _scrollController = ScrollController();
 
+  // 자막 글자 크기
+  double _captionFontSize = 18.0;
+
   StreamSubscription<SpeechMessage>? _messageSubscription;
   StreamSubscription<bool>? _connectionSubscription;
 
@@ -226,14 +229,24 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 한국어 원문
           Text(
             message.originalText ?? '',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: _captionFontSize,
+              fontWeight: FontWeight.w500,
+            ),
           ),
+
           const SizedBox(height: 8),
+
+          // 영어 번역
           Text(
             message.translatedText ?? '',
-            style: TextStyle(fontSize: 16, color: Colors.indigo.shade600),
+            style: TextStyle(
+              fontSize: _captionFontSize - 2,
+              color: Colors.indigo.shade600,
+            ),
           ),
         ],
       ),
@@ -255,14 +268,21 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 한국어 중간 인식 결과
           Text(
             _interimOriginal,
-            style: const TextStyle(fontSize: 18, color: Colors.black54),
+            style: TextStyle(fontSize: _captionFontSize, color: Colors.black54),
           ),
+
           const SizedBox(height: 8),
+
+          // 영어 중간 번역 결과
           Text(
             _interimTranslated,
-            style: TextStyle(fontSize: 16, color: Colors.indigo.shade400),
+            style: TextStyle(
+              fontSize: _captionFontSize - 2,
+              color: Colors.indigo.shade400,
+            ),
           ),
         ],
       ),
@@ -332,6 +352,57 @@ class _HomeScreenState extends State<HomeScreen> {
                             : null,
                         icon: const Icon(Icons.mic_off),
                         label: const Text('마이크 OFF'),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  Row(
+                    children: [
+                      const Icon(Icons.format_size, size: 20),
+
+                      const SizedBox(width: 8),
+
+                      const Text(
+                        '자막 크기',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+
+                      const SizedBox(width: 20),
+
+                      Expanded(
+                        child: Slider(
+                          value: _captionFontSize,
+                          min: 14,
+                          max: 32,
+                          divisions: 18,
+                          label: '${_captionFontSize.toInt()}',
+                          onChanged: (value) {
+                            setState(() {
+                              _captionFontSize = value;
+                            });
+
+                            _scrollToBottom();
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      SizedBox(
+                        width: 48,
+                        child: Text(
+                          '${_captionFontSize.toInt()}',
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ],
                   ),
