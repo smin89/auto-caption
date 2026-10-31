@@ -49,16 +49,17 @@ class SpeechTranslationService:
             self.on_result(data)
 
     def _on_recognizing(self, evt):
-        original = evt.result.text
-        translated = evt.result.translations.get("en")
+        original = (evt.result.text or "").strip()
+        translated = (evt.result.translations.get("en") or "").strip()
 
+        # 음성인식 결과가 없으면 전송하지 않음
         if not original:
             return
 
         data = {
             "type": "speech.recognizing",
             "originalText": original,
-            "translatedText": translated or "",
+            "translatedText": translated,
             "isFinal": False
         }
 
@@ -66,7 +67,9 @@ class SpeechTranslationService:
 
         if not self.on_result:
             print(f"[인식 중] 한국어: {original}")
-            print(f"[번역 중] 영어: {translated}")
+
+            if translated:
+                print(f"[번역 중] 영어: {translated}")
 
     def _on_recognized(self, evt):
         if evt.result.reason == speechsdk.ResultReason.TranslatedSpeech:
@@ -87,12 +90,6 @@ class SpeechTranslationService:
                 print(f"한국어: {original}")
                 print(f"영어: {translated}")
                 print("-" * 50)
-
-        elif evt.result.reason == speechsdk.ResultReason.NoMatch:
-            self._emit({
-                "type": "speech.no_match",
-                "message": "음성을 인식하지 못했습니다."
-            })
 
     def _on_canceled(self, evt):
         error_message = evt.error_details or str(evt.reason)
