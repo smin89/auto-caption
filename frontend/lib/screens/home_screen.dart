@@ -14,6 +14,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final WebSocketService _webSocketService = WebSocketService();
+  final ScrollController _scrollController = ScrollController();
 
   StreamSubscription<SpeechMessage>? _messageSubscription;
   StreamSubscription<bool>? _connectionSubscription;
@@ -52,8 +53,19 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // 자막 최하단 이동
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    });
+  }
+
   void _handleMessage(SpeechMessage message) {
     if (!mounted) return;
+
+    bool shouldScroll = false;
 
     setState(() {
       switch (message.type) {
@@ -74,6 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
         case 'speech.recognizing':
           _interimOriginal = message.originalText ?? '';
           _interimTranslated = message.translatedText ?? '';
+          shouldScroll = true;
           break;
 
         case 'speech.recognized':
@@ -81,6 +94,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
           _interimOriginal = '';
           _interimTranslated = '';
+
+          shouldScroll = true;
           break;
 
         case 'speech.stopped':
@@ -101,6 +116,10 @@ class _HomeScreenState extends State<HomeScreen> {
           break;
       }
     });
+
+    if (shouldScroll) {
+      _scrollToBottom();
+    }
   }
 
   Future<void> _connect() async {
@@ -157,6 +176,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _interimOriginal = '';
       _interimTranslated = '';
     });
+
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
   }
 
   @override
@@ -164,86 +187,171 @@ class _HomeScreenState extends State<HomeScreen> {
     _messageSubscription?.cancel();
     _connectionSubscription?.cancel();
 
+    _scrollController.dispose();
+
     unawaited(_webSocketService.dispose());
 
     super.dispose();
   }
 
+  Widget _buildStatusIndicator() {
+    Color color;
+
+    if (!_isConnected) {
+      color = Colors.grey;
+    } else if (_isRecognizing) {
+      color = Colors.green;
+    } else {
+      color = Colors.blue;
+    }
+
+    return Row(
+      children: [
+        Icon(Icons.circle, size: 10, color: color),
+        const SizedBox(width: 8),
+        Text(_statusMessage, style: const TextStyle(fontSize: 13)),
+      ],
+    );
+  }
+
+  Widget _buildCaptionItem(SpeechMessage message) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message.originalText ?? '',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message.translatedText ?? '',
+            style: TextStyle(fontSize: 16, color: Colors.indigo.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInterimCaption() {
+    if (_interimOriginal.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.indigo.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.indigo.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _interimOriginal,
+            style: const TextStyle(fontSize: 18, color: Colors.black54),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _interimTranslated,
+            style: TextStyle(fontSize: 16, color: Colors.indigo.shade400),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
-        title: const Text('Auto Caption'),
+        title: const Text(
+          'Auto Caption',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
         actions: [
           IconButton(
             onPressed: _clearResults,
             tooltip: '자막 초기화',
             icon: const Icon(Icons.delete_outline),
           ),
+          const SizedBox(width: 12),
         ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 연결 상태
-            Row(
-              children: [
-                Icon(
-                  _isConnected ? Icons.circle : Icons.circle_outlined,
-                  color: _isConnected ? Colors.green : Colors.grey,
-                  size: 12,
-                ),
-                const SizedBox(width: 8),
-                Text(_statusMessage),
-              ],
+            // 상단 상태 및 제어 영역
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildStatusIndicator(),
+
+                  const SizedBox(height: 20),
+
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _isConnected ? null : _connect,
+                        icon: const Icon(Icons.link),
+                        label: const Text('서버 연결'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed:
+                            _isConnected && !_isRecognizing && !_isProcessing
+                            ? _startSpeech
+                            : null,
+                        icon: const Icon(Icons.mic),
+                        label: const Text('마이크 ON'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _isRecognizing && !_isProcessing
+                            ? _stopSpeech
+                            : null,
+                        icon: const Icon(Icons.mic_off),
+                        label: const Text('마이크 OFF'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
-            // 제어 버튼
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _isConnected ? null : _connect,
-                  icon: const Icon(Icons.link),
-                  label: const Text('서버 연결'),
-                ),
-
-                const SizedBox(width: 12),
-
-                ElevatedButton.icon(
-                  onPressed: _isConnected && !_isRecognizing && !_isProcessing
-                      ? _startSpeech
-                      : null,
-                  icon: const Icon(Icons.mic),
-                  label: const Text('마이크 ON'),
-                ),
-
-                const SizedBox(width: 12),
-
-                ElevatedButton.icon(
-                  onPressed: _isRecognizing && !_isProcessing
-                      ? _stopSpeech
-                      : null,
-                  icon: const Icon(Icons.mic_off),
-                  label: const Text('마이크 OFF'),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // 실시간 자막 영역
+            // 자막 영역
             Expanded(
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: ListView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       '실시간 자막',
@@ -255,56 +363,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     const SizedBox(height: 20),
 
-                    // 최종 확정 자막
-                    ..._finalResults.map(
-                      (result) => Padding(
-                        padding: const EdgeInsets.only(bottom: 20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              result.originalText ?? '',
-                              style: const TextStyle(fontSize: 18),
-                            ),
-
-                            const SizedBox(height: 6),
-
-                            Text(
-                              result.translatedText ?? '',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // 인식 중간 결과
-                    if (_interimOriginal.isNotEmpty)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    Expanded(
+                      child: ListView(
+                        controller: _scrollController,
                         children: [
-                          Text(
-                            _interimOriginal,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey,
-                            ),
-                          ),
-
-                          const SizedBox(height: 6),
-
-                          Text(
-                            _interimTranslated,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey,
-                            ),
-                          ),
+                          ..._finalResults.map(_buildCaptionItem),
+                          _buildInterimCaption(),
                         ],
                       ),
+                    ),
                   ],
                 ),
               ),
