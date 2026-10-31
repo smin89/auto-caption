@@ -27,6 +27,7 @@ Future<void> main() async {
     );
 
     await windowManager.setResizable(true);
+    await windowManager.setAlwaysOnTop(true);
 
     await acrylic.Window.setEffect(effect: acrylic.WindowEffect.transparent);
 
