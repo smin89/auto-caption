@@ -1,14 +1,14 @@
 import time
 
 from backend.app.config.settings import Settings
-from backend.app.services.speech_service import SpeechService
+from backend.app.services.speech_translation_service import SpeechTranslationService
 
 
 def main():
 
     settings = Settings()
 
-    speech_service = SpeechService(settings)
+    speech_service = SpeechTranslationService(settings)
 
     try:
         speech_service.start()
@@ -17,7 +17,7 @@ def main():
             time.sleep(0.1)
 
     except KeyboardInterrupt:
-        print("\n사용자가 음성인식을 중단했습니다.")
+        print("\n사용자가 음성 번역을 중단했습니다.")
 
     except Exception as e:
         print(f"[오류] {e}")
