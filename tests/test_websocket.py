@@ -4,34 +4,62 @@ import json
 from websockets.asyncio.client import connect
 
 
+async def receive_messages(websocket):
+    try:
+        async for message in websocket:
+            data = json.loads(message)
+
+            print(f"\n[수신] {data}")
+
+    except Exception as e:
+        print(f"[수신 오류] {e}")
+
+
 async def main():
 
     uri = "ws://127.0.0.1:8000/ws/speech"
 
     async with connect(uri) as websocket:
 
-        # 연결 완료 이벤트 수신
-        response = await websocket.recv()
+        receiver_task = asyncio.create_task(
+            receive_messages(websocket)
+        )
 
-        print(f"[연결] {response}")
+        print("WebSocket 연결 완료")
+        print("명령어: start / stop / ping / exit")
 
-        # 테스트 메시지
-        messages = [
-            {"type": "ping"},
-            {"type": "speech.start"},
-            {"type": "speech.stop"},
-            {"type": "unknown"}
-        ]
+        try:
+            while True:
+                command = await asyncio.to_thread(
+                    input,
+                    "\n명령어 입력: "
+                )
 
-        for message in messages:
+                if command == "start":
+                    message = {"type": "speech.start"}
 
-            print(f"\n[전송] {message}")
+                elif command == "stop":
+                    message = {"type": "speech.stop"}
 
-            await websocket.send(json.dumps(message))
+                elif command == "ping":
+                    message = {"type": "ping"}
 
-            response = await websocket.recv()
+                elif command == "exit":
+                    break
 
-            print(f"[응답] {response}")
+                else:
+                    print("지원하지 않는 명령어입니다.")
+                    continue
+
+                await websocket.send(json.dumps(message))
+
+        finally:
+            receiver_task.cancel()
+
+            try:
+                await receiver_task
+            except asyncio.CancelledError:
+                pass
 
 
 if __name__ == "__main__":
