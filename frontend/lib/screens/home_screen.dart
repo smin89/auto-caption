@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 import '../models/speech_message.dart';
 import '../services/websocket_service.dart';
 import '../widgets/control_bar.dart';
+import '../services/backend_process_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,6 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // =========================================================
 
   final WebSocketService _webSocketService = WebSocketService();
+  final BackendProcessService _backendProcessService = BackendProcessService();
   final ScrollController _scrollController = ScrollController();
 
   StreamSubscription<SpeechMessage>? _messageSubscription;
@@ -59,7 +61,54 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+
     _initializeWebSocket();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startBackendAndConnect();
+    });
+  }
+
+  Future<void> _startBackendAndConnect() async {
+    if (_isProcessing || _isConnected) {
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+      _statusMessage = 'Python 백엔드 시작 중...';
+    });
+
+    try {
+      // 1. Python 백엔드 실행
+      await _backendProcessService.start();
+
+      if (!mounted) return;
+
+      setState(() {
+        _statusMessage = '서버 연결 중...';
+      });
+
+      // 2. WebSocket 연결
+      await _webSocketService.connect();
+
+      if (!mounted) return;
+
+      setState(() {
+        _isProcessing = false;
+        _statusMessage = '서버 연결 완료';
+      });
+    } catch (e) {
+      debugPrint('[App] 자동 실행 오류: $e');
+
+      if (!mounted) return;
+
+      setState(() {
+        _isProcessing = false;
+        _isConnected = false;
+        _statusMessage = '백엔드 실행 또는 연결에 실패했습니다.';
+      });
+    }
   }
 
   void _initializeWebSocket() {
@@ -90,6 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController.dispose();
 
     unawaited(_webSocketService.dispose());
+    unawaited(_backendProcessService.stop());
 
     super.dispose();
   }
@@ -174,33 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // =========================================================
 
   Future<void> _connect() async {
-    if (_isConnected || _isProcessing) return;
-
-    setState(() {
-      _isProcessing = true;
-      _statusMessage = '서버 연결 중...';
-    });
-
-    try {
-      await _webSocketService.connect();
-
-      if (!mounted) return;
-
-      setState(() {
-        _isProcessing = false;
-      });
-    } catch (e) {
-      debugPrint('[WebSocket] 연결 실패: $e');
-
-      if (!mounted) return;
-
-      setState(() {
-        _isConnected = false;
-        _isRecognizing = false;
-        _isProcessing = false;
-        _statusMessage = '서버에 연결할 수 없습니다.';
-      });
-    }
+    await _startBackendAndConnect();
   }
 
   // =========================================================
@@ -282,12 +306,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _closeApp() async {
     try {
+      // 1. WebSocket 연결 종료
       await _webSocketService.disconnect();
-    } catch (e) {
-      debugPrint('[App] WebSocket 종료 오류: $e');
-    }
 
-    await windowManager.close();
+      // 2. Flutter가 실행한 Python 백엔드 종료
+      await _backendProcessService.stop();
+    } catch (e) {
+      debugPrint('[App] 종료 처리 오류: $e');
+    } finally {
+      await windowManager.close();
+    }
   }
 
   // =========================================================

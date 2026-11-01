@@ -1,7 +1,18 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
+
+# Environment
 .env
 .env.*
 !.env.example
+
+# Build outputs
+build/
+dist/
+release/
+*.spec
+
+# macOS
 .DS_Store
